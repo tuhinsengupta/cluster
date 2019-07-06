@@ -51,7 +51,7 @@ public class MemberDiscoverThread extends Thread {
 		}
 
 		try( MulticastSocket multicastSocket = new MulticastSocket(service.getConfig().getMulticastPort())){
-			
+			multicastSocket.setLoopbackMode(true);
 			InetAddress multicastGroup = InetAddress.getByName(service.getConfig().getMulticastGroup());
 			joinMulticastGroup(multicastSocket,multicastGroup);
 			byte[] receiveData = new byte[1024];
