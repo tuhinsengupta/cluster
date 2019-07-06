@@ -157,10 +157,11 @@ public class ClusterDemo {
 	}
 	
 	private void addItemsToTable(Table table, TableDataModel model) {
+		int rowNum = 1;
 	    for( TableRow row: model.getData().getRows()) {
 	    	TableItem item = new TableItem(table, SWT.NULL);
 	    	int i=0;
-    		item.setText(i++, ""+i);
+    		item.setText(i++, ""+rowNum++);
 	    	for(TableColValue col : row.getColumns()) {
 	    		
 	    		item.setText(i++, col.getValue());
