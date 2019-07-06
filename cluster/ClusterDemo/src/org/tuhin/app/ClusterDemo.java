@@ -118,24 +118,28 @@ public class ClusterDemo {
 			@Override
 			public TableCol[] getColumnDetails() {
 				
-				return new TableCol[]{new TableCol("Node"), new TableCol("Address"), new TableCol("Started At", SWT.RIGHT)};
+				return new TableCol[]{new TableCol("Node"), new TableCol("Address"), new TableCol("Started At", SWT.RIGHT), new TableCol("Remarks")};
 			}
 			@Override
 			public TableData getData() {
 				TableData data = new TableData();
 				for( ClusterMember node: cluster.getNodes()) {
+					String remarks = "";
 					TableRow row = new TableRow();
 					Color fg_color = null;
 					if ( node.getStartedAsLead() != -1) {
 						fg_color = new Color (Display.getCurrent(), 255, 0, 0); 
+						remarks += " [Leader]";
 					}
 					Color bg_color = null;
 					if ( node.isCurrent()) {
 						bg_color = new Color (Display.getCurrent(), 255, 255, 153); 
+						remarks += " [This Instance]";
 					}
 					row.add(new TableColValue(node.getId().toString(), fg_color, bg_color));
 					row.add(new TableColValue(node.getAddress().getHostName() + ":" + node.getPort()));
 					row.add(new TableColValue(new Timestamp(node.getStarted()).toString()));
+					row.add(new TableColValue(remarks));
 					data.add(row);
 				}
 				return data;
