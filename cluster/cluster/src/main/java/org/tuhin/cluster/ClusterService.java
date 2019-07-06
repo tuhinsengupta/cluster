@@ -72,7 +72,6 @@ public class ClusterService implements Runnable{
 	private Exception exception = null;
 	private boolean leader = false;
 	protected ClusterMember leadMember = null;
-	private boolean firstMember = true;
 
 	private Set<ClusterMember> joinedMemebers = Collections.synchronizedSet(new HashSet<ClusterMember>());
 
@@ -222,14 +221,21 @@ public class ClusterService implements Runnable{
 		}
 
 
-		if (!firstMember){
-
+		//Wait for Lead Member Discovery
+		while (leadMember == null){
+			try {
+				Thread.sleep(500);
+			} catch (InterruptedException e) {
+				logger.error("start()", e);
+			}
+		}
+		
+		if ( !leadMember.equals(findCurrent())) {
 			boolean dataSynced = syncData(leadMember);
-
+	
 			if (logger.isDebugEnabled() && dataSynced) {
 				logger.debug("Data synced for current node.");
 			}
-
 		}
 
 		if (logger.isDebugEnabled()) {
@@ -279,15 +285,6 @@ public class ClusterService implements Runnable{
 					//Socket is used
 					logger.warn("Node Listener could not be started for : " + currentMember ,e);
 
-				}
-			}
-
-			if ( firstMember ){
-				leader = true;
-				currentMember.setStartedAsLead();
-				leadMember = currentMember;
-				if (logger.isDebugEnabled()) {
-					logger.debug("This is lead member : " + currentMember );
 				}
 			}
 
@@ -370,7 +367,6 @@ public class ClusterService implements Runnable{
 			if ( stat.isLeader()){
 				member.setStartedAsLeader(stat.getStartedAsLeader());
 				leadMember = member;
-				firstMember = false;
 			}
 			member.setId(stat.getId());
 
