@@ -15,6 +15,9 @@ public class NetUtils {
         Enumeration interfaces = NetworkInterface.getNetworkInterfaces();
         while (interfaces.hasMoreElements()) {
             NetworkInterface i = (NetworkInterface) interfaces.nextElement();
+            if ( i.isLoopback()) {
+            	continue;
+            }
             Enumeration addresses = i.getInetAddresses();
             while (addresses.hasMoreElements()) {
                 InetAddress address = (InetAddress) addresses.nextElement();
