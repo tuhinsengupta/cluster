@@ -297,7 +297,7 @@ public class ClusterService implements Runnable{
 				error=false;
 				runningServerSocket  = serverSocket;
 				// Broadcast me to other nodes
-				announceMyArrival(serverSocket.getLocalPort(), config.getMulticastGroup(), config.getMulticastPort());
+				broadcastMyPresence(serverSocket.getLocalPort(), config.getMulticastGroup(), config.getMulticastPort());
 
 				while(!isStopped()){
 
@@ -375,11 +375,11 @@ public class ClusterService implements Runnable{
 
 	}
 
-	private void announceMyArrival(int port, String group, int multicast_port) throws Exception {
+	private void broadcastMyPresence(int port, String group, int multicast_port) throws Exception {
 		new Thread(() -> {
 			while(!isStopped()) {
 				int ttl = 1;
-				try(BufferedReader inFromUser =	new BufferedReader(new InputStreamReader(System.in));MulticastSocket clientSocket = new MulticastSocket()){
+				try(MulticastSocket clientSocket = new MulticastSocket()){
 					InetAddress IPAddress = InetAddress.getByName(group);
 					byte[] sendData = ByteBuffer.allocate(4).putInt(port).array();
 					DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, multicast_port);

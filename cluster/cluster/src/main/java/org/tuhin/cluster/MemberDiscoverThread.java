@@ -61,6 +61,7 @@ public class MemberDiscoverThread extends Thread {
 				int senderMemberPort = ByteBuffer.wrap(receivePacket.getData()).asIntBuffer().get();
 				InetAddress address = receivePacket.getAddress();
 				ClusterMember clusterNode = new ClusterMember(address, senderMemberPort);
+				System.out.println(address.getHostAddress());
 				service.addMemberToCluster(clusterNode);
 				ready = true;
 			}

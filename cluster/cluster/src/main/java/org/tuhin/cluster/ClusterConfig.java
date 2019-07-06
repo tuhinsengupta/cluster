@@ -35,7 +35,7 @@ public class ClusterConfig {
 	private long maxWait = 30;
 	
 	private int multicastPort = 8888;
-	private String multicastGroup = "224.0.1.0";
+	private String multicastGroup = "239.0.0.0";
 
 
 	public ClusterConfig setSocketBacklog(int socketBacklog) {
