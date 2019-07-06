@@ -8,7 +8,7 @@ import org.tuhin.cluster.ClusterMember;
 import org.tuhin.cluster.ClusterService;
 import org.tuhin.cluster.ClusterServiceException;
 
-public class Cluster {
+public class Cluster implements AutoCloseable{
 	
 	private static Cluster instance;
 	
@@ -44,6 +44,17 @@ public class Cluster {
 
 	public String getName() {
 		return service.getConfig().getMulticastGroup();
+	}
+
+
+	@Override
+	public void close() throws Exception {
+		stop();
+	}
+
+
+	public ClusterService getService() {
+		return service;
 	}
 
 }
