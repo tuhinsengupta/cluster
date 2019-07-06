@@ -16,6 +16,7 @@ import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.net.DatagramPacket;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.MulticastSocket;
 import java.net.ServerSocket;
@@ -380,9 +381,11 @@ public class ClusterService implements Runnable{
 			while(!isStopped()) {
 				int ttl = 1;
 				try(MulticastSocket clientSocket = new MulticastSocket()){
-					InetAddress IPAddress = InetAddress.getByName(group);
+					InetAddress multicastAddress = InetAddress.getByName(group);
+			        NetUtils.setInterface(clientSocket, multicastAddress instanceof Inet6Address);
+			        clientSocket.setLoopbackMode(false);
 					byte[] sendData = ByteBuffer.allocate(4).putInt(port).array();
-					DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, IPAddress, multicast_port);
+					DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, multicastAddress, multicast_port);
 					clientSocket.setTimeToLive(ttl);
 					clientSocket.send(sendPacket);
 					Thread.sleep(1000);

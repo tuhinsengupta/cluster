@@ -51,7 +51,6 @@ public class MemberDiscoverThread extends Thread {
 		}
 
 		try( MulticastSocket multicastSocket = new MulticastSocket(service.getConfig().getMulticastPort())){
-			multicastSocket.setLoopbackMode(true);
 			InetAddress multicastGroup = InetAddress.getByName(service.getConfig().getMulticastGroup());
 			joinMulticastGroup(multicastSocket,multicastGroup);
 			byte[] receiveData = new byte[1024];
@@ -88,33 +87,10 @@ public class MemberDiscoverThread extends Thread {
 	
 	
 	public static void joinMulticastGroup(MulticastSocket multicastSocket, InetAddress multicastAddress) throws IOException {
-        setInterface(multicastSocket, multicastAddress instanceof Inet6Address);
+        NetUtils.setInterface(multicastSocket, multicastAddress instanceof Inet6Address);
         multicastSocket.setLoopbackMode(false);
         multicastSocket.joinGroup(multicastAddress);
     }
 
-    public static void setInterface(MulticastSocket multicastSocket, boolean preferIpv6) throws IOException {
-        boolean interfaceSet = false;
-        Enumeration interfaces = NetworkInterface.getNetworkInterfaces();
-        while (interfaces.hasMoreElements()) {
-            NetworkInterface i = (NetworkInterface) interfaces.nextElement();
-            Enumeration addresses = i.getInetAddresses();
-            while (addresses.hasMoreElements()) {
-                InetAddress address = (InetAddress) addresses.nextElement();
-                if (preferIpv6 && address instanceof Inet6Address) {
-                    multicastSocket.setInterface(address);
-                    interfaceSet = true;
-                    break;
-                } else if (!preferIpv6 && address instanceof Inet4Address) {
-                    multicastSocket.setInterface(address);
-                    interfaceSet = true;
-                    break;
-                }
-            }
-            if (interfaceSet) {
-                break;
-            }
-        }
-    }
 
 }
