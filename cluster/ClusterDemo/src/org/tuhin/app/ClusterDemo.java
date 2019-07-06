@@ -7,9 +7,8 @@ import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 
-import org.eclipse.jface.viewers.IBaseLabelProvider;
-import org.eclipse.jface.viewers.IContentProvider;
 import org.eclipse.swt.SWT;
+import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.layout.FillLayout;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
@@ -21,6 +20,7 @@ import org.tuhin.cluster.ClusterMember;
 
 public class ClusterDemo {
 
+	
 	protected Shell shell;
 
 	private List<UpdatableTable> updateList = new ArrayList<UpdatableTable>();
@@ -45,6 +45,7 @@ public class ClusterDemo {
 	 * Open the window.
 	 */
 	public void open() {
+		Display.setAppName("Cluster Demo");
 		Display display = Display.getDefault();
 		createContents();
 		shell.open();
@@ -106,26 +107,28 @@ public class ClusterDemo {
 		exec_composite.setLayout(new FillLayout(SWT.HORIZONTAL));
 
 		createTable(node_composite, new TableDataModel() { 
-			public IContentProvider getProvider() {
-				return new ClusterContentProvider();
-			}
-			public IBaseLabelProvider getLabelProvider() {
-				return new ClusterLabelProvider();
-			}
 			@Override
 			public TableCol[] getColumnDetails() {
 				
 				return new TableCol[]{new TableCol("Node"), new TableCol("Address"), new TableCol("Started At", SWT.RIGHT)};
 			}
 			@Override
-			public Object[][] getData() {
-				Object[][] data = new Object[cluster.getNodes().size()][3];
-				int index_r = 0;
+			public TableData getData() {
+				TableData data = new TableData();
 				for( ClusterMember node: cluster.getNodes()) {
-					data[index_r][0] = node.getId().toString() + ((node.isCurrent())?" * ":"") + ((node.getStartedAsLead() == -1)?"":" L ");
-					data[index_r][1] = node.getAddress().getHostName() + ":" + node.getPort();
-					data[index_r][2] = new Timestamp(node.getStarted()).toString();
-					index_r++;
+					TableRow row = new TableRow();
+					Color fg_color = null;
+					if ( node.getStartedAsLead() != -1) {
+						fg_color = new Color (Display.getCurrent(), 255, 0, 0); 
+					}
+					Color bg_color = null;
+					if ( node.isCurrent()) {
+						bg_color = new Color (Display.getCurrent(), 255, 255, 153); 
+					}
+					row.add(new TableColValue(node.getId().toString(), fg_color, bg_color));
+					row.add(new TableColValue(node.getAddress().getHostName() + ":" + node.getPort()));
+					row.add(new TableColValue(new Timestamp(node.getStarted()).toString()));
+					data.add(row);
 				}
 				return data;
 			}
@@ -139,27 +142,42 @@ public class ClusterDemo {
 		table.setHeaderVisible(true);
 	    table.setLinesVisible(true);
 
+    	TableColumn indexc = new TableColumn(table, SWT.RIGHT);
+    	indexc.setText("#");
+
 	    for (TableCol col: model.getColumnDetails() ) {
 	    	TableColumn tc = new TableColumn(table, col.getAlignment());
 	    	tc.setText(col.getName());
 	    }
-	    
-	    for( Object[] row: model.getData()) {
-	    	TableItem item = new TableItem(table, SWT.NULL);
-	    	int i=0;
-	    	for(Object col : row) {
-	    		item.setText(i++, (String)col);
-	    	}
-	    	
-	    }
-	    
-	    for (int loopIndex = 0; loopIndex < model.getColumnDetails().length; loopIndex++) {
-	        table.getColumn(loopIndex).pack();
-	    }
-	    
+
+    	addItemsToTable(table,model);
+
+	    	    
 	    updateList.add(new UpdatableTable(table,model));
 	}
 	
+	private void addItemsToTable(Table table, TableDataModel model) {
+	    for( TableRow row: model.getData().getRows()) {
+	    	TableItem item = new TableItem(table, SWT.NULL);
+	    	int i=0;
+    		item.setText(i++, ""+i);
+	    	for(TableColValue col : row.getColumns()) {
+	    		
+	    		item.setText(i++, col.getValue());
+	    		if (col.getDisplayColor() != null) {
+	    			item.setForeground(col.getDisplayColor());
+	    		}
+	    		if (col.getBackColor() != null) {
+	    			item.setBackground(col.getBackColor());
+	    		}
+	    	}
+	    	
+	    }
+	    for (int loopIndex = 0; loopIndex <= model.getColumnDetails().length; loopIndex++) {
+	        table.getColumn(loopIndex).pack();
+	    }
+	}
+
 	private void updateData() {
 		for(UpdatableTable updatableTable: updateList ) {
 			TableDataModel model = updatableTable.getModel();
@@ -167,18 +185,8 @@ public class ClusterDemo {
 			
 			table.removeAll();
 		    
-		    for( Object[] row: model.getData()) {
-		    	TableItem item = new TableItem(table, SWT.NULL);
-		    	int i=0;
-		    	for(Object col : row) {
-		    		item.setText(i++, (String)col);
-		    	}
-		    	
-		    }
-		    
-		    for (int loopIndex = 0; loopIndex < model.getColumnDetails().length; loopIndex++) {
-		        table.getColumn(loopIndex).pack();
-		    }
+			addItemsToTable(table,model);
+
 		}
 		
 		DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
