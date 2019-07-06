@@ -179,6 +179,7 @@ public class ClusterService implements Runnable{
 		}
 
 		instance = null;
+		findCurrent().reset();
 	}
 
 	public void start() throws ClusterServiceException {

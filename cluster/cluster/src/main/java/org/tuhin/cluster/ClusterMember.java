@@ -37,6 +37,12 @@ public class ClusterMember implements Serializable{
 
 	private transient boolean current = false;
 
+	public void reset() {
+	 started = -1;
+	 startedAsLead = -1;
+		
+	}
+	
 	public void setStarted(){
 		started = System.currentTimeMillis();
 	}
