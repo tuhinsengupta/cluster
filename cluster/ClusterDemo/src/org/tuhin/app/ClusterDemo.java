@@ -4,6 +4,7 @@ import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
 
@@ -122,7 +123,7 @@ public class ClusterDemo {
 			}
 			@Override
 			public TableData getData() {
-				TableData data = new TableData();
+				TableData data = new TableData(2);
 				for( ClusterMember node: cluster.getNodes()) {
 					String remarks = "";
 					TableRow row = new TableRow();
@@ -180,7 +181,7 @@ public class ClusterDemo {
 			}
 			@Override
 			public TableData getData() {
-				TableData data = new TableData();
+				TableData data = new TableData(0);
 				
 				for( String key: cluster_map.keySet()) {
 					TableRow row = new TableRow();
