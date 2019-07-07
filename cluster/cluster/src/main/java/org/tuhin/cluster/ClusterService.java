@@ -74,7 +74,7 @@ public class ClusterService implements Runnable{
 	private boolean leader = false;
 	protected ClusterMember leadMember = null;
 
-	private Set<ClusterMember> joinedMemebers = Collections.synchronizedSet(new HashSet<ClusterMember>());
+	private Map<UUID, ClusterMember> joinedMembers = Collections.synchronizedMap(new HashMap<UUID,ClusterMember>());
 
 	private Map<String,Map<Object,Object>> mapStore = Collections.synchronizedMap(new HashMap<String,Map<Object,Object>>());
 
@@ -166,7 +166,7 @@ public class ClusterService implements Runnable{
 		serverThread = null;
 		runningServerSocket = null;
 
-		joinedMemebers.clear();
+		joinedMembers.clear();
 
 		clientProcessingService.shutdown();
 		try {
@@ -278,7 +278,7 @@ public class ClusterService implements Runnable{
 					serverSocket = new ServerSocket(port, config.getSocketBacklog());
 					currentMember.setCurrent();
 					currentMember.setStarted();
-					joinedMemebers.add(currentMember);
+					joinedMembers.put(currentMember.getId(),currentMember);
 					currentNodeStarted = true;
 					if (logger.isDebugEnabled()) {
 						logger.debug("Node Listener port strated : " + currentMember );
@@ -371,11 +371,23 @@ public class ClusterService implements Runnable{
 				leadMember = member;
 			}
 			member.setId(stat.getId());
+			
+			if ( member.getId().equals(findCurrent().getId())) {
+				member.setCurrent();
+			}
 
-			joinedMemebers.add(member);
+			for(ClusterMember node : getMembers()) {
+				if ( node.getAddress().equals(member.getAddress()) && node.getPort() == member.getPort()) {
+					joinedMembers.remove(node.getId());
+				}
+			}
+			joinedMembers.put(member.getId(),member);
+			
 		}
 
 	}
+
+
 
 	private void broadcastMyPresence(int port, String group, int multicast_port) throws Exception {
 		new Thread(() -> {
@@ -1404,10 +1416,10 @@ public class ClusterService implements Runnable{
 		}
 
 		Set<ClusterMember> members = Collections.synchronizedSet(new HashSet<ClusterMember>());
-		synchronized (joinedMemebers) {
+		synchronized (joinedMembers) {
 
-			for(ClusterMember member:joinedMemebers){
-				members.add(member);
+			for(UUID memberId:joinedMembers.keySet()){
+				members.add(joinedMembers.get(memberId));
 			}
 
 		}
@@ -1879,7 +1891,8 @@ public class ClusterService implements Runnable{
 
 
 	public ClusterMember findMember(String ip, int port) {
-		for(ClusterMember member : joinedMemebers){
+		for(UUID memberId : joinedMembers.keySet()){
+			ClusterMember member  = joinedMembers.get(memberId);
 			if (member.getAddress().getHostAddress().equals(ip) && member.getPort() == port){
 				return member;
 			}
@@ -2059,7 +2072,7 @@ public class ClusterService implements Runnable{
 
 
 	public void removeMemberFromCluster(ClusterMember member) {
-		joinedMemebers.remove(member);
+		joinedMembers.remove(member.getId());
 	}
 
 
