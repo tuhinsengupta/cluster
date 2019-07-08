@@ -1,12 +1,13 @@
 package org.tuhin.app;
 
+import java.io.Serializable;
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
@@ -14,10 +15,12 @@ import org.eclipse.swt.events.SelectionEvent;
 import org.eclipse.swt.events.SelectionListener;
 import org.eclipse.swt.graphics.Color;
 import org.eclipse.swt.layout.FillLayout;
-import org.eclipse.swt.layout.RowLayout;
 import org.eclipse.swt.widgets.Button;
 import org.eclipse.swt.widgets.Composite;
 import org.eclipse.swt.widgets.Display;
+import org.eclipse.swt.widgets.Label;
+import org.eclipse.swt.widgets.Menu;
+import org.eclipse.swt.widgets.MenuItem;
 import org.eclipse.swt.widgets.Shell;
 import org.eclipse.swt.widgets.Table;
 import org.eclipse.swt.widgets.TableColumn;
@@ -25,11 +28,15 @@ import org.eclipse.swt.widgets.TableItem;
 import org.eclipse.swt.widgets.Text;
 import org.tuhin.cluster.ClusterMember;
 import org.tuhin.cluster.DistributedMap;
+import org.tuhin.cluster.DistributedThreadPool;
+import org.tuhin.cluster.TaskDistributingPolicy;
 
 public class ClusterDemo {
 
 	private static Cluster cluster;
 	private static DistributedMap<String, String> cluster_map;
+	private static DistributedThreadPool cluster_pool;
+	private static List<CommandOutput> command_output;
 	
 	protected Shell shell;
 
@@ -43,10 +50,17 @@ public class ClusterDemo {
 		try(Cluster c = Cluster.getInstance()){
 			cluster = c;
 			cluster_map = new DistributedMap<String, String>(cluster.getService(), "DemoMap");
+			cluster_pool = new DistributedThreadPool(cluster.getService(), TaskDistributingPolicy.RoundRobin, 20);
+			command_output = new ArrayList<CommandOutput>();
 			ClusterDemo window = new ClusterDemo();
 			window.open();
 		} catch (Exception e) {
 			e.printStackTrace();
+		}
+		cluster_pool.shutdown();
+		try {
+			cluster_pool.awaitTermination(Integer.MAX_VALUE, TimeUnit.MINUTES);
+		} catch (InterruptedException e) {
 		}
 	}
 
@@ -62,6 +76,23 @@ public class ClusterDemo {
 		shell.setLayout(new FillLayout(SWT.VERTICAL));
 	
 		shell.layout();
+		
+	    Label label = new Label(shell, SWT.CENTER);
+	    label.setBounds(shell.getClientArea());
+
+	    Menu menuBar = new Menu(shell, SWT.BAR);
+	    MenuItem fileMenuHeader = new MenuItem(menuBar, SWT.CASCADE);
+	    fileMenuHeader.setText("&Run");
+
+	    Menu runMenu = new Menu(shell, SWT.DROP_DOWN);
+	    fileMenuHeader.setMenu(runMenu);
+
+	    MenuItem runHelloWorld = new MenuItem(runMenu, SWT.PUSH);
+	    runHelloWorld.setText("&Hello World!");
+
+	    runHelloWorld.addSelectionListener(new RunHelloWorld(cluster_pool));
+
+	    shell.setMenuBar(menuBar);
 		
 		Thread updateThread = new Thread() {
 	        public void run() {
@@ -112,8 +143,8 @@ public class ClusterDemo {
 		maps_composite.setLayout(new FillLayout(SWT.VERTICAL));
 		
 		
-		//Composite exec_composite = new Composite(shell, SWT.BORDER);
-		//exec_composite.setLayout(new FillLayout(SWT.HORIZONTAL));
+		Composite exec_composite = new Composite(shell, SWT.BORDER);
+		exec_composite.setLayout(new FillLayout(SWT.HORIZONTAL));
 
 		createTable(node_composite, new TableDataModel() { 
 			@Override
@@ -144,6 +175,9 @@ public class ClusterDemo {
 					data.add(row);
 				}
 				return data;
+			}
+			@Override
+			public void clearData() {
 			}
 		});
 
@@ -191,14 +225,45 @@ public class ClusterDemo {
 				}
 				return data;
 			}
+			@Override
+			public void clearData() {
+			}
 		});
 		
 		maps_form.setWeights(new int[] {1,9});
 
+		createTable(exec_composite, new TableDataModel() { 
+			@Override
+			public TableCol[] getColumnDetails() {
+				
+				return new TableCol[]{new TableCol("Date/Time",SWT.RIGHT), new TableCol("Command"), new TableCol("Output")};
+			}
+			@Override
+			public TableData getData() {
+				TableData data = new TableData(0);
+				
+				for( CommandOutput output: command_output) {
+					TableRow row = new TableRow();
+					row.add(new TableColValue(output.getDate()));
+					row.add(new TableColValue(output.getCommand()));
+					row.add(new TableColValue(output.getOutput()));
+					data.add(row);
+				}
+				return data;
+			}
+			@Override
+			public void clearData() {
+				command_output.clear();
+			}
+		},true);
+		
 
 	}
 
 	private void createTable(Composite composite, TableDataModel model) {
+		createTable(composite,model,false);
+	}
+	private void createTable(Composite composite, TableDataModel model, boolean appendMode) {
 		
 		Table table = new Table(composite, SWT.FULL_SELECTION | SWT.BORDER | SWT.V_SCROLL| SWT.H_SCROLL);
 		table.setHeaderVisible(true);
@@ -213,10 +278,8 @@ public class ClusterDemo {
 	    	tc.setWidth(100);
 	    }
 
-    	addItemsToTable(table,model);
-
-	    	    
-	    updateList.add(new UpdatableTable(table,model));
+    	addItemsToTable(table,model);	
+	    updateList.add(new UpdatableTable(table,model,appendMode));
 	}
 	
 	private void addItemsToTable(Table table, TableDataModel model) {
@@ -246,10 +309,16 @@ public class ClusterDemo {
 		for(UpdatableTable updatableTable: updateList ) {
 			TableDataModel model = updatableTable.getModel();
 			Table table = updatableTable.getTable();
+			if ( !updatableTable.isAppendMode()) {
+				table.removeAll();
+			}
 			
-			table.removeAll();
-		    
 			addItemsToTable(table,model);
+			
+			if ( updatableTable.isAppendMode()) {
+				model.clearData();
+			}
+			
 
 		}
 		
@@ -257,6 +326,13 @@ public class ClusterDemo {
 		Date date = new Date();
 		
 		shell.setText("Cluster Group : " + cluster.getName() + "[Last Updated : " + dateFormat.format(date) + "]");
+	}
+
+	public static void addExecOutput(String command, String output) {		
+		DateFormat dateFormat = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss");
+		Date date = new Date();
+		
+		command_output.add(new CommandOutput(dateFormat.format(date), command, output));
 	}
 
 }

@@ -108,7 +108,8 @@ public class TestDistributedExecution {
 				//Thread.sleep(1000);
 
 			}
-			pool.submit(new Runnable() {
+			
+			pool.submit(new SerilizableRunnable() {
 				
 				public void run() {
 					System.out.println("Hello World!");

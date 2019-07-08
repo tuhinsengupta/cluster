@@ -28,6 +28,7 @@ public class TableData {
 		rows.add(row);
 	}
 
+	
 	public List<TableRow> getRows() {
 		if (compareFunc != null) {
 		 Collections.sort(rows,compareFunc);

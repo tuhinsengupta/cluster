@@ -6,4 +6,6 @@ public interface TableDataModel {
 	public TableCol[] getColumnDetails();
 
 	public TableData getData();
+	
+	public void clearData();
 }
