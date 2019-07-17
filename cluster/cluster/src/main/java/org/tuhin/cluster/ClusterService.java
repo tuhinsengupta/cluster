@@ -2,26 +2,20 @@ package org.tuhin.cluster;
 
 
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.InputStreamReader;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
-import java.net.DatagramPacket;
-import java.net.Inet6Address;
 import java.net.InetAddress;
-import java.net.MulticastSocket;
 import java.net.ServerSocket;
 import java.net.Socket;
-import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -44,6 +38,8 @@ import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
 import org.apache.log4j.Logger;
+import org.tuhin.cluster.multicast.CastRegistry;
+import org.tuhin.cluster.multicast.TCPNode;
 
 
 public class ClusterService implements Runnable{
@@ -58,8 +54,6 @@ public class ClusterService implements Runnable{
 
 
 	private static final String CLUSTER_SERVICE_MAIN_THREAD_NAME = "ClusterService-Main";
-	private static final String CLUSTER_SERVICE_DISCOVER_THREAD_NAME = "ClusterService-Discover";
-	private static final String CLUSTER_SERVICE_ANNOUNCE_THREAD_NAME = "ClusterService-Announce";
 	private static final String CLUSTER_SERVICE_HEARTBEAT_THREAD_NAME = "ClusterService-HeartBeat";
 	private static final String CLUSTER_SERVICE_CLIENT_PROCESSOR_THREAD_NAME = "ClusterService-ClientRequestProcessor";
 
@@ -76,6 +70,8 @@ public class ClusterService implements Runnable{
 
 	private Map<UUID, ClusterMember> joinedMembers = Collections.synchronizedMap(new HashMap<UUID,ClusterMember>());
 
+	private CastRegistry registry;
+	
 	private Map<String,Map<Object,Object>> mapStore = Collections.synchronizedMap(new HashMap<String,Map<Object,Object>>());
 
 	private Map<String,ThreadPoolExecutor> servicePool = Collections.synchronizedMap(new HashMap<String,ThreadPoolExecutor>());
@@ -87,7 +83,6 @@ public class ClusterService implements Runnable{
 	private ServerSocket runningServerSocket = null;
 
 	private Thread serverThread;
-	private MemberDiscoverThread discoverThread;
 	private Thread heartBeatThread;
 
 
@@ -138,9 +133,6 @@ public class ClusterService implements Runnable{
 
 		stopRequested = true;
 
-		if (discoverThread != null) {
-			discoverThread.setStop(true);
-		}
 		if ( heartBeatThread != null ){
 			heartBeatThread.interrupt();
 		}
@@ -178,6 +170,9 @@ public class ClusterService implements Runnable{
 			shutdownNowImpl(name);
 		}
 
+		if ( registry != null ) {
+			registry.close();
+		}
 		instance = null;
 		findCurrent().reset();
 	}
@@ -208,20 +203,6 @@ public class ClusterService implements Runnable{
 		if ( error ){
 			throw new ClusterServiceException(exception);
 		}
-
-		discoverThread = new MemberDiscoverThread(CLUSTER_SERVICE_DISCOVER_THREAD_NAME, this);
-		discoverThread.start();
-		while (!discoverThread.isReady()){
-			try {
-				Thread.sleep(500);
-			} catch (InterruptedException e) {
-				logger.error("start()", e);
-			}
-		}
-		if ( discoverThread.isError() ){
-			throw new ClusterServiceException(discoverThread.getException());
-		}
-
 
 		//Wait for Lead Member Discovery
 		while (leadMember == null){
@@ -298,9 +279,15 @@ public class ClusterService implements Runnable{
 				ready=true;
 				error=false;
 				runningServerSocket  = serverSocket;
-				// Broadcast me to other nodes
-				broadcastMyPresence(serverSocket.getLocalPort(), config.getMulticastGroup(), config.getMulticastPort());
-
+				// Start Client Registry Service - using multi/broadcating via UDP
+				registry = new CastRegistry(
+															config.getMulticastGroup(), 
+															config.getMulticastPort(), 
+															currentMember.getId().toString(), 
+															new TCPNode(InetAddress.getLocalHost().getHostName(), serverSocket.getLocalPort()),
+															this
+														);
+						
 				while(!isStopped()){
 
 					if ( stopRequested ){
@@ -347,7 +334,7 @@ public class ClusterService implements Runnable{
 		}
 	}
 
-	protected void addMemberToCluster(ClusterMember member) {
+	public void addMemberToCluster(ClusterMember member) {
 
 		if (logger.isDebugEnabled()) {
 			logger.debug("Adding member : " + member);
@@ -388,32 +375,7 @@ public class ClusterService implements Runnable{
 	}
 
 
-
-	private void broadcastMyPresence(int port, String group, int multicast_port) throws Exception {
-		new Thread(() -> {
-			while(!isStopped()) {
-				int ttl = 1;
-				try(MulticastSocket clientSocket = new MulticastSocket()){
-					InetAddress multicastAddress = InetAddress.getByName(group);
-			        NetUtils.setInterface(clientSocket, multicastAddress instanceof Inet6Address);
-			        clientSocket.setLoopbackMode(false);
-					byte[] sendData = ByteBuffer.allocate(4).putInt(port).array();
-					DatagramPacket sendPacket = new DatagramPacket(sendData, sendData.length, multicastAddress, multicast_port);
-					clientSocket.setTimeToLive(ttl);
-					clientSocket.send(sendPacket);
-					Thread.sleep(1000);
-				}catch(Exception e) {
-				}
-			}
-
-		}
-		, CLUSTER_SERVICE_ANNOUNCE_THREAD_NAME).start();
-
-	}
-
-
-
-	public ClusterMember findCurrent() {
+   public ClusterMember findCurrent() {
 		if (logger.isDebugEnabled()) {
 			logger.debug("findCurrent() - start");
 		}

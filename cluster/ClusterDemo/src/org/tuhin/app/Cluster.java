@@ -7,6 +7,7 @@ import org.tuhin.cluster.ClusterConfig;
 import org.tuhin.cluster.ClusterMember;
 import org.tuhin.cluster.ClusterService;
 import org.tuhin.cluster.ClusterServiceException;
+import org.tuhin.cluster.multicast.NetUtils;
 
 public class Cluster implements AutoCloseable{
 	
@@ -43,7 +44,11 @@ public class Cluster implements AutoCloseable{
 
 
 	public String getName() {
-		return service.getConfig().getMulticastGroup();
+		if ( service.getConfig().getMulticastGroup() != null ) {
+			return "<Multicast :" + service.getConfig().getMulticastGroup() + ">";
+		}else {
+			return "<Broadcast :" + NetUtils.listAllBroadcastAddresses().toString() + ">";
+		}
 	}
 
 

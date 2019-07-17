@@ -1,6 +1,5 @@
 package org.tuhin.app;
 
-import java.io.Serializable;
 import java.sql.Timestamp;
 import java.text.DateFormat;
 import java.text.SimpleDateFormat;
@@ -9,6 +8,10 @@ import java.util.Date;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.log4j.BasicConfigurator;
+import org.apache.log4j.Level;
+import org.apache.log4j.Logger;
+import org.apache.log4j.spi.Configurator;
 import org.eclipse.swt.SWT;
 import org.eclipse.swt.custom.SashForm;
 import org.eclipse.swt.events.SelectionEvent;
@@ -47,6 +50,8 @@ public class ClusterDemo {
 	 * @param args
 	 */
 	public static void main(String[] args) {
+		BasicConfigurator.configure();
+		Logger.getRootLogger().setLevel(Level.INFO);
 		try(Cluster c = Cluster.getInstance()){
 			cluster = c;
 			cluster_map = new DistributedMap<String, String>(cluster.getService(), "DemoMap");
