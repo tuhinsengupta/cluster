@@ -14,7 +14,7 @@ public class ClusterMessage implements Serializable{
 	 * 
 	 */
 	private static final long serialVersionUID = 1487257777667499439L;
-	public static enum Operation { CreateMap, PutIntoMap, ClearMap, Sync, Stat, RemoveFromMap, PutAllIntoMap, Execute, AwaitTermination, IsShutdown, IsTerminated, ShutdownNow, Shutdown, CreateExecutorService, InvokeAll, InvokeAny, Cancel, Get, IsCancelled, IsDone, Submit,  Custom, UnsetLeader, ZipLogFiles }
+	public static enum Operation { CreateMap, PutIntoMap, ClearMap, Sync, Stat, RemoveFromMap, PutAllIntoMap, Execute, AwaitTermination, IsShutdown, IsTerminated, ShutdownNow, Shutdown, CreateExecutorService, InvokeAll, InvokeAny, Cancel, Get, IsCancelled, IsDone, Submit,  Custom, UnsetLeader, ZipLogFiles, MemberList, SendMemberList }
 	
 	private Operation operation;
 	private List<Object> args;

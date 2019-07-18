@@ -66,7 +66,7 @@ public class ClusterHeartBeatService implements Runnable {
 						}
 						if ( stat.isLeader() ){
 							leaders++;
-							clusterService.leadMember = member;
+							clusterService.setLeadMember(member);
 						}
 					}else{
 						if (logger.isDebugEnabled()) {

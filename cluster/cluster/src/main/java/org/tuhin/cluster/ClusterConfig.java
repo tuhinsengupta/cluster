@@ -15,6 +15,7 @@ public class ClusterConfig {
 	private static final Logger logger = Logger.getLogger(ClusterConfig.class);
 	
 	private static int DEFAULT_WEIGHT = 1;
+	private static int DEFAULT_PORT   = 0;
 	private static InetAddress localHost;
 	static{
 		try {
@@ -24,19 +25,27 @@ public class ClusterConfig {
 		}
 	}
 
-	
+
+	private int weight = DEFAULT_WEIGHT;
+	private int port   = DEFAULT_PORT;
 	private ClusterMember currentMember;
 	private int heartBeatInterval = 1000; //Default 10 Sec
 	private int networkTimeout = 2000; //Default 2 sec
 	private int waitForLeaderInterval = 2000; //Default 2 Sec
-
 	private int socketBacklog = 50;
-
 	private long maxWait = 30;
-	
-	private int multicastPort = 8888;
+	private int multicastPort = 67;
 	private String multicastGroup = null; //default is broadcast
+	private String peerNode = null;
 
+	public String getPeerNode() {
+		return peerNode;
+	}
+
+	public ClusterConfig setPeerNode(String peerNode) {
+		this.peerNode = peerNode;
+		return this;
+	}
 
 	public ClusterConfig setSocketBacklog(int socketBacklog) {
 		this.socketBacklog = socketBacklog;
@@ -44,19 +53,15 @@ public class ClusterConfig {
 		return this;
 	}
 
-	public ClusterMember getCurrentMember() {
+	public ClusterMember getCurrentMember() throws IOException {
+		if ( currentMember == null) {
+			currentMember = ClusterMember.allocateLocal(localHost, weight, port);
+		}
 		return currentMember;
 	}
 
-	public ClusterConfig() throws IOException {
-		this(DEFAULT_WEIGHT);
+	public ClusterConfig(){
 	}
-
-	public ClusterConfig(int weight) throws IOException {
-		currentMember = ClusterMember.allocateLocal(localHost, weight);
-		logger.info("[Cluster Config] <Init> " + toString());
-	}
-
 
 	public int getHeartBeatInterval() {
 		return heartBeatInterval;
@@ -90,12 +95,15 @@ public class ClusterConfig {
 		return waitForLeaderInterval;
 	}
 
+
+
 	@Override
 	public String toString() {
-		return "ClusterConfig [currentMember=" + currentMember + ", heartBeatInterval="
-				+ heartBeatInterval + ", networkTimeout=" + networkTimeout
-				+ ", waitForLeaderInterval=" + waitForLeaderInterval 
-				+ ", socketBacklog=" + socketBacklog + ", maxWait=" + maxWait + "]";
+		return "ClusterConfig [weight=" + weight + ", port=" + port + ", currentMember=" + currentMember
+				+ ", heartBeatInterval=" + heartBeatInterval + ", networkTimeout=" + networkTimeout
+				+ ", waitForLeaderInterval=" + waitForLeaderInterval + ", socketBacklog=" + socketBacklog + ", maxWait="
+				+ maxWait + ", multicastPort=" + multicastPort + ", multicastGroup=" + multicastGroup + ", peerNode="
+				+ peerNode + "]";
 	}
 
 	public int getSocketBacklog() {
@@ -110,16 +118,36 @@ public class ClusterConfig {
 		return multicastPort;
 	}
 
-	public void setMulticastPort(int multicastPort) {
+	public ClusterConfig setMulticastPort(int multicastPort) {
 		this.multicastPort = multicastPort;
+		return this;
 	}
 
 	public String getMulticastGroup() {
 		return multicastGroup;
 	}
 
-	public void setMulticastGroup(String multicastGroup) {
+	public ClusterConfig setMulticastGroup(String multicastGroup) {
 		this.multicastGroup = multicastGroup;
+		return this;
+	}
+
+	public int getWeight() {
+		return weight;
+	}
+
+	public ClusterConfig setWeight(int weight) {
+		this.weight = weight;
+		return this;
+	}
+
+	public int getPort() {
+		return port;
+	}
+
+	public ClusterConfig setPort(int port) {
+		this.port = port;
+		return this;
 	}
 
 

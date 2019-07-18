@@ -172,7 +172,7 @@ public class DistributedThreadPool implements ExecutorService{
 				logger.info("Executing on current member");
 
 				try {
-					service.execute(service.findCurrent(),instanceId,arg0);
+					service.execute(service.getCurrent(),instanceId,arg0);
 				} catch (IOException e1) {
 					throw new RuntimeException(e1);
 				}
@@ -274,7 +274,7 @@ public class DistributedThreadPool implements ExecutorService{
 				logger.info("Executing on current member");
 
 				try {
-					return service.invokeAll(service.findCurrent(), instanceId, arg0, arg1, arg2);
+					return service.invokeAll(service.getCurrent(), instanceId, arg0, arg1, arg2);
 				} catch (IOException e1) {
 					throw new RuntimeException(e1);
 				}
@@ -351,7 +351,7 @@ public class DistributedThreadPool implements ExecutorService{
 				logger.info("Executing on current member");
 
 				try {
-					return service.invokeAny(service.findCurrent(), instanceId, arg0, arg1, arg2);
+					return service.invokeAny(service.getCurrent(), instanceId, arg0, arg1, arg2);
 				} catch (IOException e1) {
 					throw new RuntimeException(e1);
 				}

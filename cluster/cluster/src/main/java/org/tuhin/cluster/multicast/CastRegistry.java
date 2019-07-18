@@ -1,21 +1,22 @@
 package org.tuhin.cluster.multicast;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.ObjectInput;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutput;
+import java.io.ObjectOutputStream;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
-import java.net.NetworkInterface;
-import java.net.SocketException;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.Enumeration;
-import java.util.List;
-import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 import org.apache.log4j.Logger;
@@ -39,15 +40,15 @@ public class CastRegistry implements AutoCloseable {
 	private final DatagramSocket castSocket;
 
 	private final int castPort;
-	
+
 	private final ClusterService service;
 
-	public CastRegistry(String host, int port, String id, TCPNode node, ClusterService service) {
+	public CastRegistry(String host, int port, ClusterService service) {
 
 		this.service = service;
 		try {
 			if ( host != null ) {
-				castAddress = InetAddress.getByName(host);
+				castAddress = Inet4Address.getByName(host);
 			}else {
 				castAddress = null;
 			}
@@ -61,7 +62,7 @@ public class CastRegistry implements AutoCloseable {
 				castSocket = new MulticastSocket(castPort);
 				castSocket.setBroadcast(true);
 			}
-			startSenderReceiver(id,node);
+			startSenderReceiver();
 
 
 		} catch (IOException e) {
@@ -69,7 +70,7 @@ public class CastRegistry implements AutoCloseable {
 		}
 	}
 
-	private void startSenderReceiver(String id, TCPNode node) {
+	private void startSenderReceiver() {
 		//receiver
 		Thread receiver_thread = new Thread(new Runnable() {
 			@Override
@@ -98,7 +99,7 @@ public class CastRegistry implements AutoCloseable {
 			public void run() {
 				while (!castSocket.isClosed()) {
 					try {
-						cast(id, node);
+						cast();
 						Thread.sleep(CAST_SEND_INTERVAL);
 					} catch (Throwable e) {
 						if (!castSocket.isClosed()) {
@@ -116,7 +117,7 @@ public class CastRegistry implements AutoCloseable {
 	private void checkMulticastAddress(InetAddress multicastAddress) {
 		if (!multicastAddress.isMulticastAddress()) {
 			String message = "Invalid multicast address " + multicastAddress;
-			if (!(multicastAddress instanceof Inet4Address)) {
+			if (multicastAddress instanceof Inet4Address) {
 				throw new IllegalArgumentException(message + ", " +
 						"ipv4 multicast address scope: 224.0.0.0 - 239.255.255.255.");
 			} else {
@@ -126,50 +127,51 @@ public class CastRegistry implements AutoCloseable {
 		}
 	}
 
-	private void receive(byte[] buf, InetSocketAddress remoteAddress) throws UnknownHostException {
+	private void receive(byte[] buf, InetSocketAddress remoteAddress) throws ClassNotFoundException, IOException {
 		if (logger.isInfoEnabled()) {
 			logger.info("Receive UDP message from " + remoteAddress);
 		}
 
-		byte[] idSize = Arrays.copyOfRange(buf, 0, 4);
-		int idLength = ByteBuffer.wrap(idSize).asIntBuffer().get();
-
-		byte[] idBytes = Arrays.copyOfRange(buf, 4, 4+idLength);
-		String id = new String(idBytes);
-
-		byte[] hostSize = Arrays.copyOfRange(buf, 4+idLength, 8+idLength);
-		int hostStringLength = ByteBuffer.wrap(hostSize).asIntBuffer().get();
-
-		byte[] hostBytes = Arrays.copyOfRange(buf, 8+idLength, 8+idLength+hostStringLength);
-		String host = new String(hostBytes);
-
-		byte[] portBytes = Arrays.copyOfRange(buf, 8+idLength+hostStringLength, buf.length);
-		int port = ByteBuffer.wrap(portBytes).asIntBuffer().get();
-
-
-		ClusterMember clusterNode = new ClusterMember(InetAddress.getByName(host), port);
-		clusterNode.setId(UUID.fromString(id));
-		service.addMemberToCluster(clusterNode);
-
+		for(ClusterMember clusterNode:unbundleData(buf)) {
+			service.addMemberToCluster(clusterNode);
+			clusterNode.setMembers(service.getConfig().getNetworkTimeout(), service.getMembers());
+		}
 	}
 
-	private void cast(String id, TCPNode node) {
+	private byte[] bundleData() throws IOException {
+		
+		ByteArrayOutputStream bos = new ByteArrayOutputStream();
+		ObjectOutput out = null;
 		try {
-			byte[] idBytes = id.getBytes();
-			byte[] hostBytes = node.getHost().getBytes();
-			byte[] data = new byte[4+idBytes.length+4+hostBytes.length+4];
-
-			//id
-
-			System.arraycopy(ByteBuffer.allocate(4).putInt(idBytes.length).array(), 0, data, 0, 4);
-			System.arraycopy(idBytes, 0, data, 4, idBytes.length);
-
-			//Host
-			System.arraycopy(ByteBuffer.allocate(4).putInt(hostBytes.length).array(), 0, data, 4+idBytes.length, 4);
-			System.arraycopy(hostBytes, 0, data, 8+idBytes.length, hostBytes.length);
-
-			//port
-			System.arraycopy(ByteBuffer.allocate(4).putInt(node.getPort()).array(), 0, data, 8+idBytes.length+hostBytes.length, 4);
+		  out = new ObjectOutputStream(bos);   
+		  out.writeObject(service.getMembers());
+		  out.flush();
+		  return bos.toByteArray();
+		} finally {
+		  try {
+		    bos.close();
+		  } catch (IOException ex) {
+		  }
+		}
+	}
+	private Set<ClusterMember> unbundleData(byte[] data) throws IOException, ClassNotFoundException {
+		ByteArrayInputStream bis = new ByteArrayInputStream(data);
+		ObjectInput in = null;
+		try {
+		  in = new ObjectInputStream(bis);
+		  return (Set<ClusterMember>) in.readObject(); 
+		} finally {
+		  try {
+		    if (in != null) {
+		      in.close();
+		    }
+		  } catch (IOException ex) {
+		  }
+		}
+	}
+	private void cast() {
+		try {
+			byte[] data = bundleData();
 
 			if ( castAddress != null) {
 				DatagramPacket hi = new DatagramPacket(data, data.length, castAddress, castPort);

@@ -12,6 +12,8 @@ import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.UUID;
 
 
@@ -104,6 +106,48 @@ public class ClusterMember implements Serializable{
 			ResultObject result = sendMessage(new ClusterMessage(ClusterMessage.Operation.Stat));
 			if ( result.isSuccess()  ){
 				return (RunStatus)result.getResult();
+			}else{
+				throw new IOException(result.getException());
+			}
+		}catch (ClassNotFoundException e) {
+			throw new RuntimeException(e);	
+		}
+	}
+
+	public Set<ClusterMember> getMembers(int timeout, Set<ClusterMember> members) throws IOException {
+		try{
+			try{
+				if (!address.isReachable(timeout)){
+					return new HashSet<ClusterMember>();
+				}
+			}catch(IOException e){
+				//ignore this and rely on sendMessage API below
+			}
+
+			ResultObject result = sendMessage(new ClusterMessage(ClusterMessage.Operation.MemberList, members));
+			if ( result.isSuccess()  ){
+				return (Set<ClusterMember>)result.getResult();
+			}else{
+				throw new IOException(result.getException());
+			}
+		}catch (ClassNotFoundException e) {
+			throw new RuntimeException(e);	
+		}
+	}
+
+	public void setMembers(int timeout, Set<ClusterMember> members) throws IOException {
+		try{
+			try{
+				if (!address.isReachable(timeout)){
+					return;
+				}
+			}catch(IOException e){
+				//ignore this and rely on sendMessage API below
+			}
+
+			ResultObject result = sendMessage(new ClusterMessage(ClusterMessage.Operation.SendMemberList, members));
+			if ( result.isSuccess()  ){
+				return;
 			}else{
 				throw new IOException(result.getException());
 			}
@@ -234,8 +278,8 @@ public class ClusterMember implements Serializable{
 		return newCopy;
 	}
 
-	public static ClusterMember allocateLocal(InetAddress localHost, int weight) throws IOException{
-		try(ServerSocket s = new ServerSocket(0)){
+	public static ClusterMember allocateLocal(InetAddress localHost, int weight, int port) throws IOException{
+		try(ServerSocket s = new ServerSocket(port)){
 			int localPort = s.getLocalPort();
 			return new ClusterMember(localHost, localPort, weight).setCurrent();
 		}

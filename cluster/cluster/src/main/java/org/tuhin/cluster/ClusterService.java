@@ -39,7 +39,6 @@ import java.util.zip.ZipOutputStream;
 
 import org.apache.log4j.Logger;
 import org.tuhin.cluster.multicast.CastRegistry;
-import org.tuhin.cluster.multicast.TCPNode;
 
 
 public class ClusterService implements Runnable{
@@ -66,12 +65,13 @@ public class ClusterService implements Runnable{
 	private boolean error = false;
 	private Exception exception = null;
 	private boolean leader = false;
-	protected ClusterMember leadMember = null;
+	private ClusterMember leadMember = null;
+	private ClusterMember currentMember = null;
 
 	private Map<UUID, ClusterMember> joinedMembers = Collections.synchronizedMap(new HashMap<UUID,ClusterMember>());
 
 	private CastRegistry registry;
-	
+
 	private Map<String,Map<Object,Object>> mapStore = Collections.synchronizedMap(new HashMap<String,Map<Object,Object>>());
 
 	private Map<String,ThreadPoolExecutor> servicePool = Collections.synchronizedMap(new HashMap<String,ThreadPoolExecutor>());
@@ -174,7 +174,7 @@ public class ClusterService implements Runnable{
 			registry.close();
 		}
 		instance = null;
-		findCurrent().reset();
+		currentMember.reset();
 	}
 
 	public void start() throws ClusterServiceException {
@@ -212,10 +212,9 @@ public class ClusterService implements Runnable{
 				logger.error("start()", e);
 			}
 		}
-		
-		if ( !leadMember.equals(findCurrent())) {
+		if ( !leadMember.equals(currentMember)) {
 			boolean dataSynced = syncData(leadMember);
-	
+
 			if (logger.isDebugEnabled() && dataSynced) {
 				logger.debug("Data synced for current node.");
 			}
@@ -244,7 +243,7 @@ public class ClusterService implements Runnable{
 		try {
 
 			boolean currentNodeStarted = false;
-			ClusterMember currentMember = config.getCurrentMember();
+			currentMember = config.getCurrentMember();
 			if (!currentNodeStarted){
 
 				if (logger.isDebugEnabled()) {
@@ -259,7 +258,7 @@ public class ClusterService implements Runnable{
 					serverSocket = new ServerSocket(port, config.getSocketBacklog());
 					currentMember.setCurrent();
 					currentMember.setStarted();
-					joinedMembers.put(currentMember.getId(),currentMember);
+					joinedMembers.putIfAbsent(currentMember.getId(),currentMember);
 					currentNodeStarted = true;
 					if (logger.isDebugEnabled()) {
 						logger.debug("Node Listener port strated : " + currentMember );
@@ -279,15 +278,33 @@ public class ClusterService implements Runnable{
 				ready=true;
 				error=false;
 				runningServerSocket  = serverSocket;
+
+				if(config.getPeerNode() != null) {
+					try {
+						String peer = config.getPeerNode();
+						String s[] = peer.split(":");
+
+						String peer_host = s[0];
+						int peer_port = 9999;
+						if ( s.length >= 2) {
+							try {
+								peer_port = Integer.parseInt(s[1]);
+							}catch(Exception e) {}
+						}
+
+						ClusterMember member = new ClusterMember(InetAddress.getByName(peer_host), peer_port);
+						Set<ClusterMember> members = member.getMembers(config.getNetworkTimeout(), getMembers());
+						for(ClusterMember m:members) {
+							joinedMembers.putIfAbsent(m.getId(),m);
+						}
+					}catch(Exception e) {} // Ignore if can't connect to Peer
+				}
 				// Start Client Registry Service - using multi/broadcating via UDP
-				registry = new CastRegistry(
-															config.getMulticastGroup(), 
-															config.getMulticastPort(), 
-															currentMember.getId().toString(), 
-															new TCPNode(InetAddress.getLocalHost().getHostName(), serverSocket.getLocalPort()),
-															this
-														);
-						
+				registry = new CastRegistry(config.getMulticastGroup(), 
+						config.getMulticastPort(), 
+						this
+						);
+			
 				while(!isStopped()){
 
 					if ( stopRequested ){
@@ -340,6 +357,10 @@ public class ClusterService implements Runnable{
 			logger.debug("Adding member : " + member);
 		}
 
+		//Never add current member back
+		if ( member.getId().equals(currentMember.getId())){
+			return;
+		}
 
 		RunStatus stat;
 		try{
@@ -358,8 +379,8 @@ public class ClusterService implements Runnable{
 				leadMember = member;
 			}
 			member.setId(stat.getId());
-			
-			if ( member.getId().equals(findCurrent().getId())) {
+
+			if ( member.getId().equals(currentMember.getId())) {
 				member.setCurrent();
 			}
 
@@ -368,19 +389,18 @@ public class ClusterService implements Runnable{
 					joinedMembers.remove(node.getId());
 				}
 			}
-			joinedMembers.put(member.getId(),member);
-			
+			joinedMembers.putIfAbsent(member.getId(),member);
+
 		}
 
 	}
 
 
-   public ClusterMember findCurrent() {
+	public ClusterMember getCurrent() {
 		if (logger.isDebugEnabled()) {
-			logger.debug("findCurrent() - start");
+			logger.debug("getCurrent() - start");
 		}
-
-		return config.getCurrentMember();
+		return currentMember;
 
 	}
 
@@ -714,7 +734,7 @@ public class ClusterService implements Runnable{
 			String id = UUID.randomUUID().toString();
 			_futureHold.put(id, future);
 
-			returnVal.add(new DistributedFuture<Object>(findCurrent(),id));
+			returnVal.add(new DistributedFuture<Object>(currentMember,id));
 		}
 
 		return returnVal;
@@ -735,7 +755,7 @@ public class ClusterService implements Runnable{
 		_futureHold.put(id, future);
 
 
-		return new DistributedFuture<Object>(findCurrent(),id);
+		return new DistributedFuture<Object>(currentMember,id);
 
 
 	}
@@ -1754,9 +1774,48 @@ public class ClusterService implements Runnable{
 						}
 
 						ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
-						ClusterMember member = findCurrent();
+						ClusterMember member = currentMember;
 						oos.writeObject(new ResultObject(new RunStatus(leader?RunStatus.Status.Leader:RunStatus.Status.Member, member.getStarted(), member.getStartedAsLead(),member.getId())));
 						oos.close();
+
+					}else if ( msg.getOperation() == ClusterMessage.Operation.MemberList ){
+
+						if (logger.isDebugEnabled()) {
+							logger.debug("Received Member List Message.");
+						}
+						if ( msg.getArgs().size() != 1){
+							throw new IllegalArgumentException("Invalid number of arguments for Member List Operation");
+						}
+
+						Set<ClusterMember> callerMembers  = (Set<ClusterMember>)msg.getArgs().get(0);
+
+						ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
+						Set<ClusterMember> members = getMembers();
+						oos.writeObject(new ResultObject(members));
+						oos.close();
+
+						for(ClusterMember m:callerMembers) {
+							joinedMembers.putIfAbsent(m.getId(),m);
+						}
+
+					}else if ( msg.getOperation() == ClusterMessage.Operation.SendMemberList ){
+
+						if (logger.isDebugEnabled()) {
+							logger.debug("Received Send Member List Message.");
+						}
+						if ( msg.getArgs().size() != 1){
+							throw new IllegalArgumentException("Invalid number of arguments for Member List Operation");
+						}
+
+						Set<ClusterMember> callerMembers  = (Set<ClusterMember>)msg.getArgs().get(0);
+
+						ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
+						oos.writeObject(new ResultObject(null));
+						oos.close();
+
+						for(ClusterMember m:callerMembers) {
+							joinedMembers.putIfAbsent(m.getId(),m);
+						}
 
 					}else	if ( msg.getOperation() == ClusterMessage.Operation.Custom ){
 
@@ -1843,6 +1902,10 @@ public class ClusterService implements Runnable{
 		return config.getNetworkTimeout();
 	}
 
+	public CastRegistry getRegistry() {
+		return registry;
+
+	}
 
 
 
@@ -2035,6 +2098,13 @@ public class ClusterService implements Runnable{
 
 	public void removeMemberFromCluster(ClusterMember member) {
 		joinedMembers.remove(member.getId());
+	}
+
+
+
+	public void setLeadMember(ClusterMember member) {
+		leadMember = member;
+		
 	}
 
 

@@ -45,7 +45,7 @@ final class ClusterAssignLeaderService implements Runnable {
 					if ( stat.isLeader() ){
 						logger.info("[Leader asigning thread] Found new leader : " + member.toString());
 						leaderPresent = true;
-						this.clusterHeartBeatService.clusterService.leadMember = member;
+						this.clusterHeartBeatService.clusterService.setLeadMember(member);
 						break; //found the leader
 					}
 				} catch (IOException e) {
@@ -61,9 +61,9 @@ final class ClusterAssignLeaderService implements Runnable {
 		if (!leaderPresent){
 			//make this leader
 			this.clusterHeartBeatService.clusterService.setLeader(true);
-			ClusterMember member = this.clusterHeartBeatService.clusterService.findCurrent();
+			ClusterMember member = this.clusterHeartBeatService.clusterService.getCurrent();
 			member.setStartedAsLead();
-			this.clusterHeartBeatService.clusterService.leadMember = member;
+			this.clusterHeartBeatService.clusterService.setLeadMember(member);
 			logger.info("[Leader asigning thread] No leader present - Making current as leader");
 		}
 

@@ -43,7 +43,7 @@ public class TestThrottle {
 
 		ClusterService service  = ClusterService.getInstance(new ClusterConfig().setSocketBacklog(100));
 
-		System.out.println("Started node : " + service.findCurrent().toString());
+		System.out.println("Started node : " + service.getCurrent().toString());
 
 		if ( args.length == 1 && args[0].equals("start")){
 
