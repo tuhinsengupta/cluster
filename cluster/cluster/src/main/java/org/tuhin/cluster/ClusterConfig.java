@@ -34,7 +34,7 @@ public class ClusterConfig {
 	private int waitForLeaderInterval = 2000; //Default 2 Sec
 	private int socketBacklog = 50;
 	private long maxWait = 30;
-	private int multicastPort = 67;
+	private int multicastPort = 8888;
 	private String multicastGroup = null; //default is broadcast
 	private String peerNode = null;
 
