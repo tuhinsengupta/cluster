@@ -72,8 +72,7 @@ So if ‘node1’ creates a map, that will be immediately available to the ‘no
 
 This will submit the task of printing “Hello World!” to the next available node of the cluster of nodes defined by ‘service’.
 
-DistributedThreadPool pool = new DistributedThreadPool(service, TaskDistributingPolicy.RoundRobin, 20);
-
+    DistributedThreadPool pool = new DistributedThreadPool(service, TaskDistributingPolicy.RoundRobin, 20);
     pool.submit(new Runnable() {
                    public void run() {
                                    System.out.println("Hello World!");
