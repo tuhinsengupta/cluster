@@ -29,7 +29,7 @@ public class ClusterConfig {
 	private int weight = DEFAULT_WEIGHT;
 	private int port   = DEFAULT_PORT;
 	private ClusterMember currentMember;
-	private int heartBeatInterval = 1000; //Default 10 Sec
+	private int heartBeatInterval = 1000; //Default 1 Sec
 	private int networkTimeout = 2000; //Default 2 sec
 	private int waitForLeaderInterval = 2000; //Default 2 Sec
 	private int socketBacklog = 50;
