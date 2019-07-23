@@ -83,7 +83,8 @@ This will submit the task of printing “Hello World!” to the next available n
 # Running the provided binary demo
 
 
-Make sure you have Java 8 or above runtime environment installed.
+Make sure you have Java 8 or above runtime environment installed. 
+Note: The provided binary is for Windows environment as it packaged windows Swing Jar within it.
 Assuming, java command is in your PATH, run following command to launch the demo. Launch, more than one instances to see the working cluster environment.
 
     java -jar clusterdemo.jar
