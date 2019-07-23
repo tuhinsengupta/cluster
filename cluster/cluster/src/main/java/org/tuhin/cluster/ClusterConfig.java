@@ -53,9 +53,13 @@ public class ClusterConfig {
 		return this;
 	}
 
-	public ClusterMember getCurrentMember() throws IOException {
+	public ClusterMember getCurrentMember(ClusterService service) throws IOException {
 		if ( currentMember == null) {
-			currentMember = ClusterMember.allocateLocal(localHost, weight, port);
+			try {
+				currentMember = ClusterMember.allocateLocal(service, localHost, weight, port);
+			} catch (ClusterServiceException e) {
+				throw new IOException(e);
+			}
 		}
 		return currentMember;
 	}

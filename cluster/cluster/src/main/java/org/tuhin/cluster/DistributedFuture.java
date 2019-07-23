@@ -35,9 +35,7 @@ public class DistributedFuture<V> implements Future<V>,Serializable{
 			}
 		} catch (IOException e) {
 			return false;
-		} catch (ClassNotFoundException e) {
-			return false;
-		}
+		} 
 	}
 
 	
@@ -64,8 +62,6 @@ public class DistributedFuture<V> implements Future<V>,Serializable{
 			}
 		} catch (IOException e) {
 			throw new ExecutionException(e);
-		} catch (ClassNotFoundException e) {
-			throw new ExecutionException(e);
 		}
 	}
 
@@ -80,8 +76,6 @@ public class DistributedFuture<V> implements Future<V>,Serializable{
 			}
 		} catch (IOException e) {
 			return false;
-		} catch (ClassNotFoundException e) {
-			return false;
 		}
 	}
 
@@ -95,8 +89,6 @@ public class DistributedFuture<V> implements Future<V>,Serializable{
 				return false;
 			}
 		} catch (IOException e) {
-			return false;
-		} catch (ClassNotFoundException e) {
 			return false;
 		}
 	}

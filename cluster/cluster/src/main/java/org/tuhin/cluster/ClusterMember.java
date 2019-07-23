@@ -4,17 +4,27 @@ import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.Serializable;
 import java.net.InetAddress;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.security.KeyFactory;
+import java.security.KeyPair;
+import java.security.KeyPairGenerator;
+import java.security.NoSuchAlgorithmException;
+import java.security.PrivateKey;
+import java.security.PublicKey;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
+
+import org.tuhin.cluster.security.SecureObjectInputStream;
+import org.tuhin.cluster.security.SecureObjectOutputStream;
+import org.tuhin.cluster.security.SecurityProtocol;
 
 
 public class ClusterMember implements Serializable{
@@ -25,7 +35,7 @@ public class ClusterMember implements Serializable{
 	private static final long serialVersionUID = -4751190758756813889L;
 
 	private static final int DEFAULT_PORT = 9200;
-	
+
 	private UUID id = UUID.randomUUID();
 
 	private InetAddress address;
@@ -33,6 +43,15 @@ public class ClusterMember implements Serializable{
 	private int weight;
 	private long started = -1;
 	private long startedAsLead = -1;
+
+	private transient PrivateKey RSAPrivateKey;
+	private byte[] RSAPublicKey;
+
+	private transient PrivateKey DSAPrivateKey;
+	private byte[] DSAPublicKey;
+
+	private transient ClusterService service;
+
 	public int getWeight() {
 		return weight;
 	}
@@ -40,11 +59,11 @@ public class ClusterMember implements Serializable{
 	private transient boolean current = false;
 
 	public void reset() {
-	 started = -1;
-	 startedAsLead = -1;
-		
+		started = -1;
+		startedAsLead = -1;
+
 	}
-	
+
 	public void setStarted(){
 		started = System.currentTimeMillis();
 	}
@@ -65,26 +84,68 @@ public class ClusterMember implements Serializable{
 		return started;
 	}
 
-	public ClusterMember(InetAddress address, int port, int weight) {
+	public ClusterMember(ClusterService service, InetAddress address, int port, int weight) throws ClusterServiceException {
 		super();
+
+		if (service == null) {
+			throw new ClusterServiceException("Service can not be null");
+		}
 		this.address = address;
 		this.port = port;
 		this.weight = weight;
+		this.service = service;
+
+		try {
+			/* Generate  RSA key pair */
+			KeyPairGenerator kpg = KeyPairGenerator.getInstance(SecurityProtocol.ALGO_RSA);
+			kpg.initialize(SecurityProtocol.RSA_KEYSIZE);
+			KeyPair kp = kpg.generateKeyPair();
+			RSAPrivateKey = kp.getPrivate();
+			RSAPublicKey = kp.getPublic().getEncoded();
+
+			/* Generate  DSA key pair */
+			KeyPairGenerator kpg1 = KeyPairGenerator.getInstance(SecurityProtocol.ALGO_DSA);
+			kpg1.initialize(SecurityProtocol.DSA_KEYSIZE);
+			KeyPair kp1 = kpg1.generateKeyPair();
+			DSAPrivateKey = kp1.getPrivate();
+			DSAPublicKey = kp1.getPublic().getEncoded();
+		}catch(NoSuchAlgorithmException e) {
+			throw new ClusterServiceException(e);
+		}
+
+
 	}
 
-	public ClusterMember(InetAddress address, int port) {
-		this(address,port,1);
+	public PrivateKey getRSAPrivateKey() {
+		return RSAPrivateKey;
 	}
 
-	public ClusterMember(InetAddress address) {
-
-		this(address, DEFAULT_PORT);
+	public PublicKey getRSAPublicKey() throws InvalidKeySpecException, NoSuchAlgorithmException {
+		return KeyFactory.getInstance(SecurityProtocol.ALGO_RSA).generatePublic(new X509EncodedKeySpec(RSAPublicKey));
 	}
 
 
-	public ClusterMember() throws UnknownHostException {
+	public PrivateKey getDSAPrivateKey() {
+		return DSAPrivateKey;
+	}
 
-		this(InetAddress.getLocalHost(), DEFAULT_PORT);
+	public PublicKey getDSAPublicKey() throws InvalidKeySpecException, NoSuchAlgorithmException {
+		return KeyFactory.getInstance(SecurityProtocol.ALGO_DSA).generatePublic(new X509EncodedKeySpec(DSAPublicKey));
+	}
+
+	public ClusterMember(ClusterService service, InetAddress address, int port) throws ClusterServiceException {
+		this(service, address,port,1);
+	}
+
+	public ClusterMember(ClusterService service, InetAddress address) throws ClusterServiceException {
+
+		this(service, address, DEFAULT_PORT);
+	}
+
+
+	public ClusterMember(ClusterService service) throws UnknownHostException, ClusterServiceException {
+
+		this(service, InetAddress.getLocalHost(), DEFAULT_PORT);
 	}
 	public InetAddress getAddress() {
 		return address;
@@ -95,67 +156,88 @@ public class ClusterMember implements Serializable{
 
 	public RunStatus isRunning(int timeout) throws IOException {
 		try{
-			try{
-				if (!address.isReachable(timeout)){
-					return new RunStatus(RunStatus.Status.NotRunning,-1,-1, UUID.randomUUID());
-				}
-			}catch(IOException e){
-				//ignore this and rely on sendMessage API below
+			if (!address.isReachable(timeout)){
+				return new RunStatus(RunStatus.Status.NotRunning,-1,-1, UUID.randomUUID());
 			}
+		}catch(IOException e){
+			//ignore this and rely on sendMessage API below
+		}
 
-			ResultObject result = sendMessage(new ClusterMessage(ClusterMessage.Operation.Stat));
-			if ( result.isSuccess()  ){
-				return (RunStatus)result.getResult();
-			}else{
-				throw new IOException(result.getException());
-			}
-		}catch (ClassNotFoundException e) {
-			throw new RuntimeException(e);	
+		ResultObject result = sendMessage(new ClusterMessage(ClusterMessage.Operation.Stat));
+		if ( result.isSuccess()  ){
+			return (RunStatus)result.getResult();
+		}else{
+			throw new IOException(result.getException());
 		}
 	}
 
+	@SuppressWarnings("unchecked")
 	public Set<ClusterMember> getMembers(int timeout, Set<ClusterMember> members) throws IOException {
 		try{
-			try{
-				if (!address.isReachable(timeout)){
-					return new HashSet<ClusterMember>();
-				}
-			}catch(IOException e){
-				//ignore this and rely on sendMessage API below
+			if (!address.isReachable(timeout)){
+				return new HashSet<ClusterMember>();
 			}
+		}catch(IOException e){
+			//ignore this and rely on sendMessage API below
+		}
 
-			ResultObject result = sendMessage(new ClusterMessage(ClusterMessage.Operation.MemberList, members));
-			if ( result.isSuccess()  ){
-				return (Set<ClusterMember>)result.getResult();
-			}else{
-				throw new IOException(result.getException());
-			}
-		}catch (ClassNotFoundException e) {
-			throw new RuntimeException(e);	
+		ResultObject result = sendMessage(new ClusterMessage(ClusterMessage.Operation.MemberList, members));
+		if ( result.isSuccess()  ){
+			return (Set<ClusterMember>)result.getResult();
+		}else{
+			throw new IOException(result.getException());
 		}
 	}
 
 	public void setMembers(int timeout, Set<ClusterMember> members) throws IOException {
 		try{
-			try{
-				if (!address.isReachable(timeout)){
-					return;
-				}
-			}catch(IOException e){
-				//ignore this and rely on sendMessage API below
-			}
-
-			ResultObject result = sendMessage(new ClusterMessage(ClusterMessage.Operation.SendMemberList, members));
-			if ( result.isSuccess()  ){
+			if (!address.isReachable(timeout)){
 				return;
-			}else{
-				throw new IOException(result.getException());
 			}
-		}catch (ClassNotFoundException e) {
-			throw new RuntimeException(e);	
+		}catch(IOException e){
+			//ignore this and rely on sendMessage API below
+		}
+
+		ResultObject result = sendMessage(new ClusterMessage(ClusterMessage.Operation.SendMemberList, members));
+		if ( result.isSuccess()  ){
+			return;
+		}else{
+			throw new IOException(result.getException());
 		}
 	}
 
+
+	public void setAddress(InetAddress address) {
+		this.address = address;
+	}
+
+	public void setPort(int port) {
+		this.port = port;
+	}
+
+	public void setWeight(int weight) {
+		this.weight = weight;
+	}
+
+	public void setRSAPrivateKey(PrivateKey rSAPrivateKey) {
+		RSAPrivateKey = rSAPrivateKey;
+	}
+
+	public void setRSAPublicKey(byte[] rSAPublicKey) {
+		RSAPublicKey = rSAPublicKey;
+	}
+
+	public void setDSAPrivateKey(PrivateKey dSAPrivateKey) {
+		DSAPrivateKey = dSAPrivateKey;
+	}
+
+	public void setDSAPublicKey(byte[] dSAPublicKey) {
+		DSAPublicKey = dSAPublicKey;
+	}
+
+	public void setCurrent(boolean current) {
+		this.current = current;
+	}
 
 	public boolean isCurrent() {
 		return current;
@@ -191,17 +273,17 @@ public class ClusterMember implements Serializable{
 		return address.getHostName() + ":" + port;
 	}
 
-	public ResultObject sendMessage(ClusterMessage message) throws IOException, ClassNotFoundException {
+	public ResultObject sendMessage(ClusterMessage message) throws IOException {
 
 		Socket socket = null;
-		ObjectOutputStream oos = null;
-		ObjectInputStream ois= null;
+		SecureObjectOutputStream oos = null;
+		SecureObjectInputStream ois= null;
 		try{
 			socket = new Socket(getAddress(), getPort());
 
-			oos = new ObjectOutputStream(socket.getOutputStream());
+			oos = new SecureObjectOutputStream(socket.getOutputStream());
 
-			oos.writeObject(message);
+			oos.writeObject(service.getCurrent(), this, message);
 
 			oos.flush();
 
@@ -242,10 +324,12 @@ public class ClusterMember implements Serializable{
 				}
 
 			}else{
-				ois = new ObjectInputStream(socket.getInputStream());
-				return (ResultObject)ois.readObject();
+				ois = new SecureObjectInputStream(socket.getInputStream());
+				return (ResultObject)ois.readObject(service);
 			}
 
+		}catch(Exception e) {
+			throw new IOException(e);
 		}finally{
 			if ( socket != null ){
 				try {
@@ -259,6 +343,12 @@ public class ClusterMember implements Serializable{
 				} catch (IOException e) {
 				}
 			}
+			if ( ois != null ){
+				try {
+					ois.close();
+				} catch (IOException e) {
+				}
+			}
 		}
 	}
 
@@ -268,20 +358,28 @@ public class ClusterMember implements Serializable{
 
 	public void setStartedAsLeader(long startedAsLeader) {
 		this.startedAsLead = startedAsLeader; 
-		
+
 	}
 
-	public ClusterMember deepCopy() {
-		ClusterMember newCopy = new ClusterMember(address, port, weight);
+	public ClusterMember deepCopy() throws ClusterServiceException {
+		ClusterMember newCopy = new ClusterMember(service, address, port, weight);
 		newCopy.setStarted(started);
 		newCopy.setStartedAsLeader(startedAsLead);
+		newCopy.setId(id);
+		newCopy.setAddress(address);
+		newCopy.setCurrent(current);
+		newCopy.setDSAPrivateKey(DSAPrivateKey);
+		newCopy.setDSAPublicKey(DSAPublicKey);
+		newCopy.setRSAPrivateKey(RSAPrivateKey);
+		newCopy.setRSAPublicKey(RSAPublicKey);
+		newCopy.setWeight(weight);
 		return newCopy;
 	}
 
-	public static ClusterMember allocateLocal(InetAddress localHost, int weight, int port) throws IOException{
+	public static ClusterMember allocateLocal(ClusterService service, InetAddress localHost, int weight, int port) throws IOException, ClusterServiceException{
 		try(ServerSocket s = new ServerSocket(port)){
 			int localPort = s.getLocalPort();
-			return new ClusterMember(localHost, localPort, weight).setCurrent();
+			return new ClusterMember(service, localHost, localPort, weight).setCurrent();
 		}
 	}
 
@@ -291,7 +389,11 @@ public class ClusterMember implements Serializable{
 
 	public void setId(UUID id) {
 		this.id = id;
-		
+
+	}
+
+	public void setService(ClusterService service) {
+		this.service = service;
 	}
 
 

@@ -48,8 +48,10 @@ final class ClusterAssignLeaderService implements Runnable {
 						this.clusterHeartBeatService.clusterService.setLeadMember(member);
 						break; //found the leader
 					}
-				} catch (IOException e) {
+				}catch (IOException e) {
 					logger.error("run()", e);
+				}catch (SecurityException e) {
+					//Ignore error
 				}
 
 

@@ -1,5 +1,7 @@
 package org.tuhin.cluster.test;
 import java.io.IOException;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
@@ -8,7 +10,6 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.apache.log4j.BasicConfigurator;
-import org.apache.log4j.varia.NullAppender;
 import org.tuhin.cluster.ClusterConfig;
 import org.tuhin.cluster.ClusterService;
 import org.tuhin.cluster.ClusterServiceException;
@@ -23,9 +24,11 @@ public class TestDistributedExecution {
 	 * @throws IOException 
 	 * @throws InterruptedException 
 	 * @throws ClusterServiceException 
+	 * @throws NoSuchProviderException 
+	 * @throws NoSuchAlgorithmException 
 	 * @throws ExecutionException 
 	 */
-	public static void main(String[] args) throws ClusterServiceException, IOException, InterruptedException  {
+	public static void main(String[] args) throws ClusterServiceException, IOException, InterruptedException, NoSuchAlgorithmException, NoSuchProviderException  {
 		//BasicConfigurator.configure(new NullAppender());
 		BasicConfigurator.configure();
 
@@ -111,6 +114,11 @@ public class TestDistributedExecution {
 			
 			pool.submit(new SerilizableRunnable() {
 				
+				/**
+				 * 
+				 */
+				private static final long serialVersionUID = 1L;
+
 				public void run() {
 					System.out.println("Hello World!");
 					

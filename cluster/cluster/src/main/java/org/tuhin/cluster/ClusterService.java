@@ -8,8 +8,6 @@ import java.io.FileOutputStream;
 import java.io.FilenameFilter;
 import java.io.IOException;
 import java.io.InputStream;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.io.StringWriter;
@@ -39,6 +37,9 @@ import java.util.zip.ZipOutputStream;
 
 import org.apache.log4j.Logger;
 import org.tuhin.cluster.multicast.CastRegistry;
+import org.tuhin.cluster.security.SecureObjectInputStream;
+import org.tuhin.cluster.security.SecureObjectOutputStream;
+import org.tuhin.cluster.security.SecurityProtocol;
 
 
 public class ClusterService implements Runnable{
@@ -223,6 +224,8 @@ public class ClusterService implements Runnable{
 		if (logger.isDebugEnabled()) {
 			logger.debug("start() - end");
 		}
+
+
 	}
 
 
@@ -243,7 +246,9 @@ public class ClusterService implements Runnable{
 		try {
 
 			boolean currentNodeStarted = false;
-			currentMember = config.getCurrentMember();
+			currentMember = config.getCurrentMember(this);
+			SecurityProtocol.initialize(this);
+
 			if (!currentNodeStarted){
 
 				if (logger.isDebugEnabled()) {
@@ -292,9 +297,10 @@ public class ClusterService implements Runnable{
 							}catch(Exception e) {}
 						}
 
-						ClusterMember member = new ClusterMember(InetAddress.getByName(peer_host), peer_port);
+						ClusterMember member = new ClusterMember(this, InetAddress.getByName(peer_host), peer_port);
 						Set<ClusterMember> members = member.getMembers(config.getNetworkTimeout(), getMembers());
 						for(ClusterMember m:members) {
+							m.setService(this);
 							joinedMembers.putIfAbsent(m.getId(),m);
 						}
 					}catch(Exception e) {} // Ignore if can't connect to Peer
@@ -304,7 +310,7 @@ public class ClusterService implements Runnable{
 						config.getMulticastPort(), 
 						this
 						);
-			
+
 				while(!isStopped()){
 
 					if ( stopRequested ){
@@ -351,7 +357,7 @@ public class ClusterService implements Runnable{
 		}
 	}
 
-	public void addMemberToCluster(ClusterMember member) {
+	public boolean addMemberToCluster(ClusterMember member) {
 
 		if (logger.isDebugEnabled()) {
 			logger.debug("Adding member : " + member);
@@ -359,7 +365,7 @@ public class ClusterService implements Runnable{
 
 		//Never add current member back
 		if ( member.getId().equals(currentMember.getId())){
-			return;
+			return false;
 		}
 
 		RunStatus stat;
@@ -390,7 +396,11 @@ public class ClusterService implements Runnable{
 				}
 			}
 			joinedMembers.putIfAbsent(member.getId(),member);
+			return true;
 
+		}else {
+			removeMemberFromCluster(member);
+			return false;
 		}
 
 	}
@@ -1019,9 +1029,7 @@ public class ClusterService implements Runnable{
 								return member.sendMessage(message);
 							} catch (IOException e) {
 								return new ResultObject(e);
-							} catch (ClassNotFoundException e) {
-								return new ResultObject(e);
-							}
+							} 
 						}
 					}
 				};
@@ -1498,13 +1506,9 @@ public class ClusterService implements Runnable{
 				throw new IOException(e);
 			}
 		}else{
-			try {
-				ResultObject result = member.sendMessage(message);
-				if (!result.isSuccess()){
-					throw new IOException(result.getException());
-				}
-			} catch (ClassNotFoundException e) {
-				throw new IOException(e);
+			ResultObject result = member.sendMessage(message);
+			if (!result.isSuccess()){
+				throw new IOException(result.getException());
 			}
 		}
 
@@ -1549,11 +1553,7 @@ public class ClusterService implements Runnable{
 				retVal = new ResultObject(e);
 			}
 		}else{
-			try {
-				retVal = member.sendMessage(message);
-			} catch (ClassNotFoundException e) {
-				retVal = new ResultObject(e);
-			}
+			retVal = member.sendMessage(message);
 		}
 
 		return retVal;
@@ -1694,14 +1694,20 @@ public class ClusterService implements Runnable{
 		private ClientRequestProcessor(Socket clientSocket,ClusterService clusterService) {
 			this.clientSocket = clientSocket;
 			this.clusterService = clusterService;
+
 		}
 
+		@SuppressWarnings("unchecked")
 		public void run() {
 			Thread.currentThread().setName(CLUSTER_SERVICE_CLIENT_PROCESSOR_THREAD_NAME);
-			ObjectInputStream ois = null;
+			SecureObjectInputStream ois = null;
+			ClusterMember sendingTo = null;
+			ClusterMember sendingFrom = null;
 			try{
-				ois = new ObjectInputStream(clientSocket.getInputStream());
-				ClusterMessage msg = (ClusterMessage)ois.readObject();
+				ois = new SecureObjectInputStream(clientSocket.getInputStream());
+				ClusterMessage msg = (ClusterMessage)ois.readObject(clusterService);
+				sendingTo = ois.getSentFrom();
+				sendingFrom = clusterService.getCurrent();
 
 				if ( msg != null ){
 					if ( msg.getOperation() == ClusterMessage.Operation.Sync ){
@@ -1712,8 +1718,8 @@ public class ClusterService implements Runnable{
 						}
 						synchronized (mapStore) {
 
-							ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
-							oos.writeObject(new ResultObject(new SyncData(mapStore, servicePool)));
+							SecureObjectOutputStream oos = new SecureObjectOutputStream(clientSocket.getOutputStream());
+							oos.writeObject(sendingFrom, sendingTo, new ResultObject(new SyncData(mapStore, servicePool)));
 							oos.close();
 						}
 
@@ -1724,8 +1730,8 @@ public class ClusterService implements Runnable{
 							logger.debug("Received UnsetLeader Message.");
 						}
 						clusterService.setLeader(false);
-						ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
-						oos.writeObject(new ResultObject(null));
+						SecureObjectOutputStream oos = new SecureObjectOutputStream(clientSocket.getOutputStream());
+						oos.writeObject(sendingFrom, sendingTo, new ResultObject(null));
 						oos.close();
 
 					}else if ( msg.getOperation() == ClusterMessage.Operation.ZipLogFiles ){
@@ -1773,9 +1779,9 @@ public class ClusterService implements Runnable{
 							logger.debug("Received STAT Message.");
 						}
 
-						ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
+						SecureObjectOutputStream oos = new SecureObjectOutputStream(clientSocket.getOutputStream());
 						ClusterMember member = currentMember;
-						oos.writeObject(new ResultObject(new RunStatus(leader?RunStatus.Status.Leader:RunStatus.Status.Member, member.getStarted(), member.getStartedAsLead(),member.getId())));
+						oos.writeObject(sendingFrom, sendingTo,new ResultObject(new RunStatus(leader?RunStatus.Status.Leader:RunStatus.Status.Member, member.getStarted(), member.getStartedAsLead(),member.getId())));
 						oos.close();
 
 					}else if ( msg.getOperation() == ClusterMessage.Operation.MemberList ){
@@ -1789,12 +1795,13 @@ public class ClusterService implements Runnable{
 
 						Set<ClusterMember> callerMembers  = (Set<ClusterMember>)msg.getArgs().get(0);
 
-						ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
+						SecureObjectOutputStream oos = new SecureObjectOutputStream(clientSocket.getOutputStream());
 						Set<ClusterMember> members = getMembers();
-						oos.writeObject(new ResultObject(members));
+						oos.writeObject(sendingFrom, sendingTo,new ResultObject(members));
 						oos.close();
 
 						for(ClusterMember m:callerMembers) {
+							m.setService(clusterService);
 							joinedMembers.putIfAbsent(m.getId(),m);
 						}
 
@@ -1809,11 +1816,12 @@ public class ClusterService implements Runnable{
 
 						Set<ClusterMember> callerMembers  = (Set<ClusterMember>)msg.getArgs().get(0);
 
-						ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
-						oos.writeObject(new ResultObject(null));
+						SecureObjectOutputStream oos = new SecureObjectOutputStream(clientSocket.getOutputStream());
+						oos.writeObject(sendingFrom, sendingTo,new ResultObject(null));
 						oos.close();
 
 						for(ClusterMember m:callerMembers) {
+							m.setService(clusterService);
 							joinedMembers.putIfAbsent(m.getId(),m);
 						}
 
@@ -1835,8 +1843,8 @@ public class ClusterService implements Runnable{
 
 						Object result = custom.execute(args);
 
-						ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
-						oos.writeObject(new ResultObject(result));
+						SecureObjectOutputStream oos = new SecureObjectOutputStream(clientSocket.getOutputStream());
+						oos.writeObject(sendingFrom, sendingTo,new ResultObject(result));
 						oos.close();
 
 					}else{
@@ -1845,7 +1853,7 @@ public class ClusterService implements Runnable{
 							logger.debug("Received OP Message.");
 						}
 
-						ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
+						SecureObjectOutputStream oos = new SecureObjectOutputStream(clientSocket.getOutputStream());
 						ResultObject result;
 						try {
 							result = new ResultObject(performOp(msg));
@@ -1859,7 +1867,7 @@ public class ClusterService implements Runnable{
 							result = new ResultObject(e);
 						}
 
-						oos.writeObject(result);
+						oos.writeObject(sendingFrom, sendingTo,result);
 						oos.close();
 					}
 
@@ -1867,8 +1875,8 @@ public class ClusterService implements Runnable{
 			}catch(Throwable t){
 				logger.error("ClientRequestProcessor.run()", t);
 				try{
-					ObjectOutputStream oos = new ObjectOutputStream(clientSocket.getOutputStream());
-					oos.writeObject(new ResultObject(t));
+					SecureObjectOutputStream oos = new SecureObjectOutputStream(clientSocket.getOutputStream());
+					oos.writeObject(sendingFrom, sendingTo, new ResultObject(t));
 					oos.close();
 				}catch(IOException e){
 					logger.error("run()", e);
@@ -2104,7 +2112,13 @@ public class ClusterService implements Runnable{
 
 	public void setLeadMember(ClusterMember member) {
 		leadMember = member;
-		
+
+	}
+
+
+
+	public ClusterMember findMember(UUID sentFrom) {
+		return joinedMembers.get(sentFrom);
 	}
 
 

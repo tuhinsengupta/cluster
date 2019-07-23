@@ -1,6 +1,8 @@
 package org.tuhin.cluster.test;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -29,8 +31,10 @@ public class TestThrottle {
 	 * @throws InterruptedException 
 	 * @throws ClusterServiceException 
 	 * @throws ExecutionException 
+	 * @throws NoSuchProviderException 
+	 * @throws NoSuchAlgorithmException 
 	 */
-	public static void main(String[] args) throws IOException, InterruptedException, ClusterServiceException, ExecutionException {
+	public static void main(String[] args) throws IOException, InterruptedException, ClusterServiceException, ExecutionException, NoSuchAlgorithmException, NoSuchProviderException {
 
 		//Appender app = new ConsoleAppender(new PatternLayout("%r [%t] %p %c %x - %m%n"));
 		
@@ -47,7 +51,7 @@ public class TestThrottle {
 
 		if ( args.length == 1 && args[0].equals("start")){
 
-			final ClusterMember member = new ClusterMember(InetAddress.getByName("LTUHS01"), 9301);
+			final ClusterMember member = new ClusterMember(service, InetAddress.getByName("LTUHS01"), 9301);
 
 			while(true){
 				ExecutorService pool = Executors.newFixedThreadPool(testSize);

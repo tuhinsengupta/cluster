@@ -13,11 +13,8 @@ import java.net.Inet4Address;
 import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.net.MulticastSocket;
-import java.net.UnknownHostException;
-import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Set;
-import java.util.UUID;
 
 import org.apache.log4j.Logger;
 import org.tuhin.cluster.ClusterMember;
@@ -83,9 +80,7 @@ public class CastRegistry implements AutoCloseable {
 						CastRegistry.this.receive(buf, (InetSocketAddress) recv.getSocketAddress());
 						Arrays.fill(buf, (byte) 0);
 					} catch (Throwable e) {
-						if (!castSocket.isClosed()) {
-							logger.error(e.getMessage(), e);
-						}
+						//Ignore the error
 					}
 				}
 			}
@@ -132,9 +127,12 @@ public class CastRegistry implements AutoCloseable {
 			logger.info("Receive UDP message from " + remoteAddress);
 		}
 
-		for(ClusterMember clusterNode:unbundleData(buf)) {
-			service.addMemberToCluster(clusterNode);
-			clusterNode.setMembers(service.getConfig().getNetworkTimeout(), service.getMembers());
+		Set<ClusterMember> members = unbundleData(buf);
+		for(ClusterMember clusterNode:members) {
+			clusterNode.setService(service);
+			if(service.addMemberToCluster(clusterNode)) {
+				clusterNode.setMembers(service.getConfig().getNetworkTimeout(), service.getMembers());
+			}
 		}
 	}
 
@@ -154,6 +152,7 @@ public class CastRegistry implements AutoCloseable {
 		  }
 		}
 	}
+	@SuppressWarnings("unchecked")
 	private Set<ClusterMember> unbundleData(byte[] data) throws IOException, ClassNotFoundException {
 		ByteArrayInputStream bis = new ByteArrayInputStream(data);
 		ObjectInput in = null;

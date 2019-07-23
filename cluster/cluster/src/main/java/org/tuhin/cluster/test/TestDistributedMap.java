@@ -1,14 +1,13 @@
 package org.tuhin.cluster.test;
 import java.io.BufferedReader;
-import java.io.File;
 import java.io.IOException;
 import java.io.InputStreamReader;
+import java.security.NoSuchAlgorithmException;
+import java.security.NoSuchProviderException;
 import java.util.HashMap;
 import java.util.Map;
 
 import org.apache.log4j.BasicConfigurator;
-import org.apache.log4j.Level;
-import org.apache.log4j.Logger;
 import org.tuhin.cluster.ClusterConfig;
 import org.tuhin.cluster.ClusterService;
 import org.tuhin.cluster.ClusterServiceException;
@@ -22,8 +21,10 @@ public class TestDistributedMap {
 	 * @throws IOException 
 	 * @throws InterruptedException 
 	 * @throws ClusterServiceException 
+	 * @throws NoSuchProviderException 
+	 * @throws NoSuchAlgorithmException 
 	 */
-	public static void main(String[] args) throws IOException, InterruptedException, ClusterServiceException {
+	public static void main(String[] args) throws IOException, InterruptedException, ClusterServiceException, NoSuchAlgorithmException, NoSuchProviderException {
 		//BasicConfigurator.configure(new NullAppender());
 		BasicConfigurator.configure();
 		
@@ -59,7 +60,7 @@ public class TestDistributedMap {
 
 		System.out.println(map1.entrySet());
 
-		File zipFile = service.zipLogFiles("C:\\BANCSFS\\BancsProduct\\Intranet\\logs", "monitor.log");
+		//File zipFile = service.zipLogFiles("C:\\BANCSFS\\BancsProduct\\Intranet\\logs", "monitor.log");
 		
 		BufferedReader in = new BufferedReader(new InputStreamReader(System.in));
 		String s;

@@ -42,6 +42,4 @@ public class ClusterMessage implements Serializable{
 				+ "]";
 	}
 	
-	
-	
 }

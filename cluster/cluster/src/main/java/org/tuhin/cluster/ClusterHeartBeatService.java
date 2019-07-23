@@ -74,7 +74,7 @@ public class ClusterHeartBeatService implements Runnable {
 						}
 						clusterService.removeMemberFromCluster(member);
 					}
-				}catch(IOException e){
+				}catch(IOException|SecurityException e){
 					logger.warn("Could not get status of node " + member.toString() + ", assuming dead. [" +  e.getMessage() + "]");
 					clusterService.removeMemberFromCluster(member);
 				}
