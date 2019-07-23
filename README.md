@@ -78,3 +78,22 @@ This will submit the task of printing “Hello World!” to the next available n
                                    System.out.println("Hello World!");
                    }
     });
+
+***
+# Running the provided binary demo
+
+
+Make sure you have Java 8 or above runtime environment installed.
+Assuming, java command is in your PATH, run following command to launch the demo. Launch, more than one instances to see the working cluster environment.
+
+    java -jar clusterdemo.jar
+    
+This launches the cluster node in default mode - with UDP broadcast way to discover other nodes.
+Following commandline options are available:
+
+    -port <port number>        : Launch the node in a specific port (port must be free and available in the host machine)
+    -group <multicast address> : Launch the node in Multicast mode with the multicast address specified as multicast group.
+    -peer <host>:<port>        : Launch the node by connecting to a specific peer and discover other nodes through the peer.
+    -weight <integer>          : Weightage of the node for weighted load balancing of task.
+    
+ 
