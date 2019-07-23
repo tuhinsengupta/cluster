@@ -37,6 +37,7 @@ import java.util.zip.ZipOutputStream;
 
 import org.apache.log4j.Logger;
 import org.tuhin.cluster.multicast.CastRegistry;
+import org.tuhin.cluster.security.PublicKeys;
 import org.tuhin.cluster.security.SecureObjectInputStream;
 import org.tuhin.cluster.security.SecureObjectOutputStream;
 import org.tuhin.cluster.security.SecurityProtocol;
@@ -298,6 +299,7 @@ public class ClusterService implements Runnable{
 						}
 
 						ClusterMember member = new ClusterMember(this, InetAddress.getByName(peer_host), peer_port);
+						member.updateActualKeys(config.getNetworkTimeout());
 						Set<ClusterMember> members = member.getMembers(config.getNetworkTimeout(), getMembers());
 						for(ClusterMember m:members) {
 							m.setService(this);
@@ -1845,6 +1847,16 @@ public class ClusterService implements Runnable{
 
 						SecureObjectOutputStream oos = new SecureObjectOutputStream(clientSocket.getOutputStream());
 						oos.writeObject(sendingFrom, sendingTo,new ResultObject(result));
+						oos.close();
+
+					}else if ( msg.getOperation() == ClusterMessage.Operation.GetKeys ){
+
+						if (logger.isDebugEnabled()) {
+							logger.debug("Received Send Member List Message.");
+						}
+
+						SecureObjectOutputStream oos = new SecureObjectOutputStream(clientSocket.getOutputStream());
+						oos.writeObject(sendingFrom, sendingTo,new ResultObject(new PublicKeys(currentMember.getRSAPublicKeyBytes(), currentMember.getDSAPublicKeyBytes())));
 						oos.close();
 
 					}else{

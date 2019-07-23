@@ -22,6 +22,7 @@ import java.util.HashSet;
 import java.util.Set;
 import java.util.UUID;
 
+import org.tuhin.cluster.security.PublicKeys;
 import org.tuhin.cluster.security.SecureObjectInputStream;
 import org.tuhin.cluster.security.SecureObjectOutputStream;
 import org.tuhin.cluster.security.SecurityProtocol;
@@ -124,6 +125,10 @@ public class ClusterMember implements Serializable{
 		return KeyFactory.getInstance(SecurityProtocol.ALGO_RSA).generatePublic(new X509EncodedKeySpec(RSAPublicKey));
 	}
 
+	public byte[] getRSAPublicKeyBytes(){
+		return RSAPublicKey;
+	}
+
 
 	public PrivateKey getDSAPrivateKey() {
 		return DSAPrivateKey;
@@ -131,6 +136,10 @@ public class ClusterMember implements Serializable{
 
 	public PublicKey getDSAPublicKey() throws InvalidKeySpecException, NoSuchAlgorithmException {
 		return KeyFactory.getInstance(SecurityProtocol.ALGO_DSA).generatePublic(new X509EncodedKeySpec(DSAPublicKey));
+	}
+
+	public byte[] getDSAPublicKeyBytes() {
+		return DSAPublicKey;
 	}
 
 	public ClusterMember(ClusterService service, InetAddress address, int port) throws ClusterServiceException {
@@ -219,20 +228,20 @@ public class ClusterMember implements Serializable{
 		this.weight = weight;
 	}
 
-	public void setRSAPrivateKey(PrivateKey rSAPrivateKey) {
-		RSAPrivateKey = rSAPrivateKey;
+	public void setRSAPrivateKey(PrivateKey RSAPrivateKey) {
+		this.RSAPrivateKey = RSAPrivateKey;
 	}
 
-	public void setRSAPublicKey(byte[] rSAPublicKey) {
-		RSAPublicKey = rSAPublicKey;
+	public void setRSAPublicKey(byte[] RSAPublicKey) {
+		this.RSAPublicKey = RSAPublicKey;
 	}
 
-	public void setDSAPrivateKey(PrivateKey dSAPrivateKey) {
-		DSAPrivateKey = dSAPrivateKey;
+	public void setDSAPrivateKey(PrivateKey DSAPrivateKey) {
+		this.DSAPrivateKey = DSAPrivateKey;
 	}
 
-	public void setDSAPublicKey(byte[] dSAPublicKey) {
-		DSAPublicKey = dSAPublicKey;
+	public void setDSAPublicKey(byte[] DSAPublicKey) {
+		this.DSAPublicKey = DSAPublicKey;
 	}
 
 	public void setCurrent(boolean current) {
@@ -352,6 +361,7 @@ public class ClusterMember implements Serializable{
 		}
 	}
 
+
 	public void setStarted(long started) {
 		this.started = started;
 	}
@@ -394,6 +404,21 @@ public class ClusterMember implements Serializable{
 
 	public void setService(ClusterService service) {
 		this.service = service;
+	}
+
+	public void updateActualKeys(int networkTimeout) throws IOException {
+		DSAPrivateKey = null;
+		DSAPublicKey = null;
+		RSAPrivateKey = null;
+		RSAPublicKey = null;
+		ResultObject result = sendMessage(new ClusterMessage(ClusterMessage.Operation.GetKeys));
+		if ( result.isSuccess()  ){
+			PublicKeys keys =  (PublicKeys)result.getResult();
+			RSAPublicKey = keys.getRSAPublicKey();
+			DSAPublicKey = keys.getDSAPublicKey();
+		}else{
+			throw new IOException(result.getException());
+		}
 	}
 
 
